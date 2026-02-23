@@ -1,0 +1,8 @@
+{
+  "name": "InterviewAI Pro",
+  "description": "An advanced AI-powered mock interview platform that generates tailored questions from job descriptions and provides deep performance analysis.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
