@@ -93,3 +93,6 @@ To create a production-ready build:
 npm run build
 ```
 The optimized files will be generated in the `dist/` folder.
+
+---
+*Powered by OpenAI.*

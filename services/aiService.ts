@@ -1,3 +1,4 @@
+
 import OpenAI from "openai";
 import { InterviewQuestion, InterviewReport } from "../types";
 
@@ -48,8 +49,8 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 /**
  * Generates tailored interview questions using the OpenAI API.
  */
-export const generateQuestions = async (jobDescription: string, companyName: string): Promise<InterviewQuestion[]> => {
-  const prompt = `Act as an expert technical recruiter. Based on the following job description for a role at ${companyName}, generate exactly 10 interview questions.
+export const generateQuestions = async (jobDescription: string, companyName: string, jobTitle: string): Promise<InterviewQuestion[]> => {
+  const prompt = `Act as an expert technical recruiter. Based on the following job description for the role of "${jobTitle}" at ${companyName}, generate exactly 10 interview questions.
   
   CRITICAL INSTRUCTIONS:
   1. The FIRST question (index 0) MUST be a generic "Tell me about yourself" introduction question.
@@ -113,7 +114,8 @@ export const analyzeInterview = async (
   
   const prompt = `
     Analyze the following mock interview session.
-    Candidate Role: ${sessionData.jobDescription.substring(0, 100)}... at ${sessionData.companyName}
+    Candidate Role: ${sessionData.jobTitle} at ${sessionData.companyName}
+    Job Description: ${sessionData.jobDescription.substring(0, 300)}...
     Transcript: "${safeTranscript}"
 
     Provide a detailed performance report in JSON format following this schema:

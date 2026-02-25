@@ -52,7 +52,7 @@ const StartSessionView: React.FC<Props> = ({ sessions }) => {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-slate-900">Setup Your Interview</h2>
-              <p className="text-slate-500">Interviewing for {session.companyName}</p>
+              <p className="text-slate-500">{session.jobTitle} at {session.companyName}</p>
             </div>
           </div>
 

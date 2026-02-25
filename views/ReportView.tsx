@@ -57,7 +57,7 @@ const ReportView: React.FC<Props> = ({ sessions }) => {
             Back to Dashboard
           </Link>
           <h1 className="text-4xl font-bold text-slate-900">Performance Report</h1>
-          <p className="text-slate-500">Interview for {session.companyName} • {new Date(session.createdAt).toLocaleDateString()}</p>
+          <p className="text-slate-500">{session.jobTitle} at {session.companyName} • {new Date(session.createdAt).toLocaleDateString()}</p>
         </div>
         <div className="flex gap-3">
           <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">

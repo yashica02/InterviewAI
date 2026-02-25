@@ -22,6 +22,7 @@ const AdminView: React.FC<Props> = ({ sessions, updateSession }) => {
   const filteredSessions = sessions.filter(s => 
     s.candidateEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.otp.includes(searchTerm)
   );
 
@@ -87,7 +88,7 @@ const AdminView: React.FC<Props> = ({ sessions, updateSession }) => {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Candidate</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Company</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Role / Company</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">OTP</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Created</th>
@@ -102,7 +103,8 @@ const AdminView: React.FC<Props> = ({ sessions, updateSession }) => {
                     <div className="text-xs text-slate-500">{s.id}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-slate-700">{s.companyName}</div>
+                    <div className="text-sm font-bold text-slate-900">{s.jobTitle}</div>
+                    <div className="text-xs text-slate-500">{s.companyName}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm font-mono font-bold text-indigo-600">{s.otp}</div>

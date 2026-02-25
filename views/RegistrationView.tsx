@@ -22,6 +22,7 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
   const [formData, setFormData] = useState({
     candidateEmail: '',
     companyName: '',
+    jobTitle: '',
     companyWebsite: '',
     jobDescription: ''
   });
@@ -44,9 +45,7 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       // Trigger the AI generation before completing the registration
-      const questions = await generateQuestions(formData.jobDescription, formData.companyName);
-
-      console.log("Generated interview questions:", questions);
+      const questions = await generateQuestions(formData.jobDescription, formData.companyName, formData.jobTitle);
       
       if (!questions || questions.length === 0) {
         throw new Error("Failed to generate questions. Please try again.");
@@ -145,6 +144,17 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
                 onChange={e => setFormData({...formData, companyName: e.target.value})}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Job Title</label>
+            <input 
+              required
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              placeholder="e.g. Senior Software Engineer"
+              value={formData.jobTitle}
+              onChange={e => setFormData({...formData, jobTitle: e.target.value})}
+            />
           </div>
 
           <div>

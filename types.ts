@@ -33,6 +33,7 @@ export interface InterviewSession {
   otp: string; // 6-digit access code for the candidate
   candidateEmail: string;
   companyName: string;
+  jobTitle: string;
   companyWebsite: string;
   jobDescription: string;
   status: SessionStatus;
