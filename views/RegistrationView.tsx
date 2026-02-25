@@ -45,6 +45,8 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
 
       // Trigger the AI generation before completing the registration
       const questions = await generateQuestions(formData.jobDescription, formData.companyName);
+
+      console.log("Generated interview questions:", questions);
       
       if (!questions || questions.length === 0) {
         throw new Error("Failed to generate questions. Please try again.");
