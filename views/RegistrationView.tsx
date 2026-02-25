@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InterviewSession, SessionStatus } from '../types';
-import { generateQuestions } from '../services/geminiService';
+import { generateQuestions } from '../services/aiService';
 import { Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
 interface Props {

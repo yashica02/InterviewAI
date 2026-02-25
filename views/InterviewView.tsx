@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { InterviewSession, SessionStatus, InterviewQuestion } from '../types';
-import { analyzeInterview } from '../services/geminiService';
-import { Camera, Mic, Timer, ChevronRight, CheckCircle, Loader2, VideoOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import { analyzeInterview } from '../services/aiService';
+import { Camera, Mic, Timer, ChevronRight, CheckCircle, Loader2, VideoOff, RefreshCw, AlertTriangle, Video } from 'lucide-react';
 
 interface Props {
   sessions: InterviewSession[];
@@ -20,6 +20,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
   const session = sessions.find(s => s.id === id);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(45 * 60); // Total session limit (45 mins)
   const [isProcessing, setIsProcessing] = useState(false);
@@ -40,6 +41,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
         videoRef.current.srcObject = stream;
         setCameraActive(true);
       }
+      return true;
     } catch (err: any) {
       console.error("Camera access failed", err);
       setCameraActive(false);
@@ -48,14 +50,22 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
       } else {
         setPermissionError("Could not access camera. Please check your device.");
       }
+      return false;
+    }
+  };
+
+  const handleStartInterview = async () => {
+    const success = await startCamera();
+    if (success) {
+      setHasStarted(true);
+      updateSession(session!.id, { status: SessionStatus.IN_INTERVIEW });
     }
   };
 
   /**
    * Component mounting logic:
    * 1. Validates the session exists.
-   * 2. Requests hardware permissions.
-   * 3. Starts the countdown timer.
+   * 2. Starts the countdown timer (only after hasStarted is true).
    */
   useEffect(() => {
     if (!session) {
@@ -63,25 +73,57 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
       return;
     }
 
-    startCamera();
-
-    const interval = setInterval(() => {
-      setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    updateSession(session.id, { status: SessionStatus.IN_INTERVIEW });
+    let interval: NodeJS.Timeout;
+    if (hasStarted) {
+      interval = setInterval(() => {
+        setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
 
     return () => {
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
       // Clean up hardware resources on exit
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [id, session, navigate]);
+  }, [id, session, navigate, hasStarted]);
 
   if (!session) return null;
+
+  // Initial "Start Mock Interview" screen
+  if (!hasStarted) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <div className="bg-white p-12 rounded-3xl shadow-xl border border-indigo-100">
+          <div className="bg-indigo-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8">
+            <Video className="w-10 h-10 text-indigo-600" />
+          </div>
+          <h2 className="text-3xl font-bold text-slate-900 mb-4">Ready to Begin?</h2>
+          <p className="text-slate-600 mb-8">
+            You are about to start your mock interview for <strong>{session.companyName}</strong>. 
+            We will ask for camera and microphone permissions once you click the button below.
+          </p>
+          
+          {permissionError && (
+            <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700 text-left">
+              <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <p className="text-sm">{permissionError}</p>
+            </div>
+          )}
+
+          <button 
+            onClick={handleStartInterview}
+            className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+          >
+            <Camera className="w-6 h-6" />
+            Start Mock Interview
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Guard: Ensure questions were successfully generated before proceeding
   if (!session.questions || session.questions.length === 0) {
