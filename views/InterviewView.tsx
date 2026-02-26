@@ -20,6 +20,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
   const session = sessions.find(s => s.id === id);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(45 * 60); // Total session limit (45 mins)
@@ -37,6 +38,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
     try {
       setPermissionError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setCameraActive(true);
@@ -83,9 +85,9 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
     return () => {
       if (interval) clearInterval(interval);
       // Clean up hardware resources on exit
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
   }, [id, session, navigate, hasStarted]);
