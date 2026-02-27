@@ -22,6 +22,8 @@ export interface InterviewQuestion {
   id: string;
   category: 'intro' | 'technical' | 'scenario' | 'behavioral' | 'closing';
   text: string;
+  guidance?: string;
+  suggestedTimeMinutes?: number;
 }
 
 /**

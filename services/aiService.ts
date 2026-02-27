@@ -1,6 +1,5 @@
-
 import OpenAI from "openai";
-import { InterviewQuestion, InterviewReport } from "../types";
+import { InterviewQuestion } from "../types";
 
 /**
  * Initialize the OpenAI client.
@@ -14,85 +13,83 @@ const openai = new OpenAI({
 });
 
 /**
- * Fallback report used when AI analysis fails or times out.
- */
-const FALLBACK_REPORT: InterviewReport = {
-  overallDimensions: {
-    ability: { label: "Ability", score: 75, feedback: "Analysis timed out. Good effort on completing the interview." },
-    knowledge: { label: "Knowledge", score: 75, feedback: "Analysis timed out. Good effort on completing the interview." },
-    skillset: { label: "Skillset", score: 75, feedback: "Analysis timed out. Good effort on completing the interview." },
-    attitude: { label: "Attitude", score: 85, feedback: "Great attitude throughout the session." }
-  },
-  technicalCommunication: [
-    { criterion: "Clarity", score: 4, comment: "Generally clear responses." },
-    { criterion: "Pace", score: 4, comment: "Good speaking pace maintained." },
-    { criterion: "Confidence", score: 3, comment: "Maintained reasonable confidence." }
-  ],
-  strengths: ["Completed the full interview session", "Maintained professional demeanor"],
-  improvements: ["Review technical concepts for deeper answers", "Try to elaborate more on scenario questions"],
-  summary: "We encountered a timeout while generating your detailed AI report. A provisional score has been assigned based on completion."
-};
-
-/**
- * Utility function to prevent API calls from hanging the UI indefinitely.
- */
-const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => {
-      console.warn(`Operation timed out after ${ms}ms`);
-      resolve(fallback);
-    }, ms))
-  ]);
-};
-
-/**
  * Generates tailored interview questions using the OpenAI API.
+ * Generates exactly 9 questions (no intro) + hard-coded intro added in RegistrationView.
  */
-export const generateQuestions = async (jobDescription: string, companyName: string, jobTitle: string): Promise<InterviewQuestion[]> => {
-  const prompt = `Act as an expert technical recruiter. Based on the following job description for the role of "${jobTitle}" at ${companyName}, generate exactly 10 interview questions.
-  
-  CRITICAL INSTRUCTIONS:
-  1. The FIRST question (index 0) MUST be a generic "Tell me about yourself" introduction question.
-  2. The remaining 9 questions MUST be specific to the job description provided below, covering technical skills, scenario-based challenges, and behavioral traits.
-  
-  Return the output as a JSON array of objects with "category" and "text" keys.
-  Categories for the 10 questions should be: introduction (for the first one), technical, scenario, behavioral, and closing (for the last one).
-  
-  Format:
-  [
-    {"category": "introduction", "text": "Tell me about yourself and your background..."},
-    {"category": "technical", "text": "..."},
-    ...
-  ]
+export const generateQuestions = async (
+  jobDescription: string,
+  companyName: string,
+  jobTitle: string
+): Promise<InterviewQuestion[]> => {
+  // Truncate JD to save tokens
+  const shortenedJD =
+    jobDescription.length > 1500
+      ? jobDescription.slice(0, 1500)
+      : jobDescription;
 
-  Job Description: ${jobDescription}`;
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content:
+        "You are an experienced technical recruiter. Given a job description and company context, you generate concise, role-appropriate interview questions as JSON."
+    },
+    {
+      role: "user",
+      content: `
+Job title: ${jobTitle}
+Company: ${companyName}
+
+Job description:
+${shortenedJD}
+
+Task:
+1. Do NOT include any introduction questions like "Tell me about yourself". We already handle that separately.
+2. Generate exactly 9 interview questions for this role, divided across these categories:
+   - technical: 4 questions
+   - scenario: 3 questions
+   - behavioral: 2 questions
+3. Each question must be 1–2 sentences, no extra explanation.
+4. Return ONLY valid JSON in this shape (no prose, no markdown):
+
+{
+  "questions": [
+    { "category": "DEEP_TECHNICAL", "text": "..." },
+    { "category": "SCENARIO", "text": "..." }
+  ]
+}
+`
+    }
+  ];
 
   const generator = async () => {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "You are a professional technical recruiter. You always respond with valid JSON arrays." },
-          { role: "user", content: prompt }
-        ],
+        model: "gpt-4o-mini",
+        messages,
+        temperature: 0.4,
+        max_tokens: 800,
         response_format: { type: "json_object" }
       });
 
-      const content = response.choices[0].message.content || "[]";
+      const content = response.choices[0].message.content || "{}";
       const parsed = JSON.parse(content);
       
       // Handle cases where AI might wrap the array in an object
-      const questionsArray = Array.isArray(parsed) ? parsed : (parsed.questions || Object.values(parsed)[0]);
+      const questionsArray = Array.isArray(parsed) 
+        ? parsed 
+        : (parsed.questions || Object.values(parsed)[0]);
 
       if (!Array.isArray(questionsArray)) {
         return [];
       }
 
+      const now = Date.now();
       return questionsArray.map((q: any, index: number) => ({
-        id: `q-${index}-${Date.now()}`,
-        category: (q.category || 'technical').toLowerCase() as any,
-        text: q.text || "Question content unavailable."
+        id: `q-${now}-${index}`,
+        category: q.category || 'technical',
+        text: q.text || "Question content unavailable.",
+        guidance: "",
+        suggestedTimeMinutes: 3
       }));
     } catch (error) {
       console.error("Error generating questions:", error);
@@ -104,55 +101,18 @@ export const generateQuestions = async (jobDescription: string, companyName: str
 };
 
 /**
- * Analyzes an interview transcript using OpenAI.
+ * Utility function to prevent API calls from hanging the UI indefinitely.
  */
-export const analyzeInterview = async (
-  sessionData: any,
-  transcript: string
-): Promise<InterviewReport> => {
-  const safeTranscript = transcript && transcript.length > 10 ? transcript : "The candidate provided very brief responses.";
-  
-  const prompt = `
-    Analyze the following mock interview session.
-    Candidate Role: ${sessionData.jobTitle} at ${sessionData.companyName}
-    Job Description: ${sessionData.jobDescription.substring(0, 300)}...
-    Transcript: "${safeTranscript}"
-
-    Provide a detailed performance report in JSON format following this schema:
-    {
-      "overallDimensions": {
-        "ability": { "label": "Ability", "score": number, "feedback": "string" },
-        "knowledge": { "label": "Knowledge", "score": number, "feedback": "string" },
-        "skillset": { "label": "Skillset", "score": number, "feedback": "string" },
-        "attitude": { "label": "Attitude", "score": number, "feedback": "string" }
-      },
-      "technicalCommunication": [
-        { "criterion": "string", "score": number, "comment": "string" }
-      ],
-      "strengths": ["string"],
-      "improvements": ["string"],
-      "summary": "string"
-    }
-  `;
-
-  const analyzer = async () => {
-    try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "You are an expert interview coach. You provide detailed, constructive feedback in JSON format." },
-          { role: "user", content: prompt }
-        ],
-        response_format: { type: "json_object" }
-      });
-
-      const content = response.choices[0].message.content || "{}";
-      return JSON.parse(content) as InterviewReport;
-    } catch (error) {
-      console.error("Error analyzing interview:", error);
-      return FALLBACK_REPORT;
-    }
-  };
-
-  return withTimeout(analyzer(), 25000, FALLBACK_REPORT);
+const withTimeout = <T>(
+  promise: Promise<T>, 
+  ms: number, 
+  fallback: T
+): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => {
+      console.warn(`Operation timed out after ${ms}ms`);
+      resolve(fallback);
+    }, ms))
+  ]);
 };

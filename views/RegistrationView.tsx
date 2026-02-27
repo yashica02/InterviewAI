@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InterviewSession, SessionStatus } from '../types';
+import { InterviewSession, SessionStatus, InterviewQuestion} from '../types';
 import { generateQuestions } from '../services/aiService';
 import { Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
@@ -32,8 +31,9 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
   /**
    * Orchestrates the session creation process.
    * 1. Generates a unique ID and OTP.
-   * 2. Calls AI service to analyze JD and generate questions.
-   * 3. Commits session to global state.
+   * 2. Calls AI service to analyze JD and generate 9 questions (no intro).
+   * 3. Adds hard-coded "Tell me about yourself" as first question.
+   * 4. Commits session to global state.
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,20 +44,42 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
       const sessionId = Math.random().toString(36).substring(2, 11);
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      // Trigger the AI generation before completing the registration
-      const questions = await generateQuestions(formData.jobDescription, formData.companyName, formData.jobTitle);
-      
-      if (!questions || questions.length === 0) {
-        throw new Error("Failed to generate questions. Please try again.");
+      // 1) Call AI to generate 9 questions (no intro question)
+      const aiQuestions: InterviewQuestion[] = await generateQuestions(
+        formData.jobDescription,
+        formData.companyName,
+        formData.jobTitle
+      );
+
+      console.log('AI-generated questions (without intro):', aiQuestions);
+
+      if (!aiQuestions || aiQuestions.length === 0) {
+        throw new Error('Failed to generate questions. Please try again.');
       }
+
+      // 2) Hard-coded intro question
+      const introQuestion: InterviewQuestion = {
+        id: 'intro-1',
+        category: 'intro',
+        text: 'Tell me about yourself in the context of this role.',
+        guidance:
+          'Provide a brief (1–2 minute) overview of your background, key skills, and why you are a strong fit for this specific position.',
+        suggestedTimeMinutes: 2
+      };
+
+      // 3) Combine intro + AI questions
+      const allQuestions: InterviewQuestion[] = [introQuestion, ...aiQuestions];
+
+      console.log('Final questions (with hard-coded intro):', allQuestions);
 
       const newSession: InterviewSession = {
         id: sessionId,
         otp,
         ...formData,
         status: SessionStatus.QUESTIONS_READY,
-        questions: questions,
-        createdAt: Date.now()
+        questions: allQuestions,
+        createdAt: Date.now(),
+        report: undefined
       };
 
       // Add to global shared state (LocalStorage backed)
@@ -66,7 +88,7 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
       // Show the success screen with the OTP
       setSuccessOTP(otp);
     } catch (err) {
-      setError("Failed to generate interview questions. Please try again.");
+      setError('Failed to generate interview questions. Please try again.');
       console.error(err);
     } finally {
       setIsLoading(false);

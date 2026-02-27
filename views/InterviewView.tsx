@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { InterviewSession, SessionStatus, InterviewQuestion } from '../types';
-import { analyzeInterview } from '../services/aiService';
+// import { analyzeInterview } from '../services/aiService';
 import { Camera, Mic, Timer, ChevronRight, CheckCircle, Loader2, VideoOff, RefreshCw, AlertTriangle, Video } from 'lucide-react';
 
 interface Props {

@@ -10,6 +10,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.999.0",
+    "@aws-sdk/lib-dynamodb": "^3.999.0",
     "lucide-react": "^0.563.0",
     "openai": "^6.25.0",
     "react": "^19.2.4",
@@ -19,6 +21,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
