@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { InterviewSession, SessionStatus, InterviewQuestion } from '../types';
 // import { analyzeInterview } from '../services/aiService';
 import { Camera, Mic, Timer, ChevronRight, CheckCircle, Loader2, VideoOff, RefreshCw, AlertTriangle, Video } from 'lucide-react';
@@ -17,7 +16,12 @@ interface Props {
 const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const session = sessions.find(s => s.id === id);
+  const location = useLocation();
+  
+  // ✅ DynamoDB-only: session from navigation state
+  const session = location.state?.session as InterviewSession;
+  
+  // Early return handled by useEffect now
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -70,7 +74,8 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
    * 2. Starts the countdown timer (only after hasStarted is true).
    */
   useEffect(() => {
-    if (!session) {
+    // Only redirect if no session AND no session in navigation state
+    if (!session && !location.state?.session) {
       navigate('/start');
       return;
     }
@@ -90,9 +95,26 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
         streamRef.current = null;
       }
     };
-  }, [id, session, navigate, hasStarted]);
+  }, [id, session, navigate, hasStarted, location.state?.session]);  // Add location.state?.session
 
-  if (!session) return null;
+
+  if (!session) 
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <div className="bg-red-50 p-8 rounded-3xl border border-red-200">
+          <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-red-900 mb-2">Session Not Found</h2>
+          <p className="text-red-700 mb-6">Please go back and verify your OTP.</p>
+          <button 
+            onClick={() => navigate('/start')} 
+            className="bg-red-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-red-700"
+          >
+            Back to Start
+          </button>
+        </div>
+      </div>
+    );
+  
 
   // Initial "Start Mock Interview" screen
   if (!hasStarted) {

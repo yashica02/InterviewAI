@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InterviewSession, SessionStatus, InterviewQuestion} from '../types';
 import { generateQuestions } from '../services/aiService';
-import { Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
+import { createInterviewSession } from '../services/dynamodbService';
 
 interface Props {
   addSession: (session: InterviewSession) => void;
@@ -41,7 +42,7 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
     setError(null);
 
     try {
-      const sessionId = Math.random().toString(36).substring(2, 11);
+      // const sessionId = Math.random().toString(36).substring(2, 11);
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       // 1) Call AI to generate 9 questions (no intro question)
@@ -71,63 +72,82 @@ const RegistrationView: React.FC<Props> = ({ addSession }) => {
       const allQuestions: InterviewQuestion[] = [introQuestion, ...aiQuestions];
 
       console.log('Final questions (with hard-coded intro):', allQuestions);
+//old code for creating session and adding to state
+    //   const newSession: InterviewSession = {
+    //     id: sessionId,
+    //     otp,
+    //     ...formData,
+    //     status: SessionStatus.QUESTIONS_READY,
+    //     questions: allQuestions,
+    //     createdAt: Date.now(),
+    //     report: undefined
+    //   };
 
-      const newSession: InterviewSession = {
-        id: sessionId,
-        otp,
-        ...formData,
-        status: SessionStatus.QUESTIONS_READY,
-        questions: allQuestions,
-        createdAt: Date.now(),
-        report: undefined
-      };
+    //   // Add to global shared state (LocalStorage backed)
+    //   addSession(newSession);
 
-      // Add to global shared state (LocalStorage backed)
-      addSession(newSession);
+    //   // Show the success screen with the OTP
+    //   setSuccessOTP(otp);
+    // } catch (err) {
+    //   setError('Failed to generate interview questions. Please try again.');
+    //   console.error(err);
+    // } finally {
+    //   setIsLoading(false);
+    // }
 
-      // Show the success screen with the OTP
-      setSuccessOTP(otp);
-    } catch (err) {
-      setError('Failed to generate interview questions. Please try again.');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    const result = await createInterviewSession({
+          email: formData.candidateEmail,
+          company: formData.companyName,
+          role: formData.jobTitle,
+          questions: allQuestions,
+          otp
+        });
+
+        console.log('Session created in DynamoDB:', result);
+        setSuccessOTP(otp);
+      } catch (err) {
+        setError('Failed to create session. Please try again.');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+
   };
 
   // Success view (After OTP generation)
+  // Success view (After OTP generation)
   if (successOTP) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="bg-white p-12 rounded-3xl shadow-xl border border-indigo-100">
-          <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8">
-            <Sparkles className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-4">Session Created!</h2>
-          <p className="text-slate-600 mb-8">Your mock interview is ready. Please share this OTP with the candidate or use it to start now.</p>
-          
-          <div className="bg-slate-50 p-6 rounded-2xl mb-8 border-2 border-dashed border-slate-200">
-            <span className="text-5xl font-mono font-bold tracking-[0.5em] text-indigo-600">{successOTP}</span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button 
-              onClick={() => navigate('/start')}
-              className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
-            >
-              Go to Start Page
-            </button>
-            <button 
-              onClick={() => navigate('/')}
-              className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-indigo-50 transition-colors"
-            >
-              Back Home
-            </button>
-          </div>
+      <div className="max-w-md mx-auto px-4 py-20 text-center">
+        <div className="bg-green-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8">
+          <CheckCircle className="w-10 h-10 text-green-600" />
+        </div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">Session Created!</h2>
+        <p className="text-slate-600 mb-8 max-w-md mx-auto">
+          Your mock interview is ready. Please share this OTP with the candidate or use it to start now.
+        </p>
+        <div className="bg-indigo-100 p-8 rounded-3xl mb-8">
+          <p className="text-4xl font-mono font-bold text-indigo-800 mb-2">{successOTP}</p>
+          <p className="text-sm text-indigo-700">6-digit OTP</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button 
+            onClick={() => navigate('/start')}
+            className="flex-1 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+          >
+            Go to Start Page
+          </button>
+          <button 
+            onClick={() => navigate('/')}
+            className="flex-1 px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-indigo-50 transition-colors"
+          >
+            Back Home
+          </button>
         </div>
       </div>
     );
   }
+
 
   // Initial form view
   return (

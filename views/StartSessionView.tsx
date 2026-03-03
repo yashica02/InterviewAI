@@ -1,11 +1,11 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InterviewSession } from '../types';
+import { InterviewSession, SessionStatus } from '../types';
+import { getSessionByEmailOtp } from '../services/dynamodbService';
 import { ShieldCheck, ArrowRight, Camera } from 'lucide-react';
 
 interface Props {
-  sessions: InterviewSession[];
+  sessions: InterviewSession[]; // Keep for backward compatibility if needed
 }
 
 /**
@@ -14,21 +14,54 @@ interface Props {
  */
 const StartSessionView: React.FC<Props> = ({ sessions }) => {
   const [otp, setOtp] = useState('');
+  const [candidateEmail, setCandidateEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [session, setSession] = useState<InterviewSession | null>(null);
   const navigate = useNavigate();
 
   /**
-   * Verifies the OTP against the local session database.
+   * Verifies the OTP against DynamoDB.
    */
-  const handleVerify = () => {
-    const found = sessions.find(s => s.otp === otp);
-    if (found) {
-      setSession(found);
+  const handleVerify = async () => {
+    if (!otp || otp.length !== 6) {
+      setError("Please enter a valid 6-digit OTP.");
+      return;
+    }
+
+    if (!candidateEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    try {
       setError(null);
-    } else {
-      setError("Invalid OTP. Please check your email or contact the administrator.");
+      const foundSession = await getSessionByEmailOtp(candidateEmail, otp);
+
+      if (foundSession) {
+        // ✅ foundSession is already typed as GetSessionResult!
+        setSession({
+          id: foundSession.sessionId,
+          otp,
+          candidateEmail: foundSession.candidateEmail,
+          companyName: foundSession.companyName,
+          jobTitle: foundSession.jobTitle,
+          companyWebsite: '',
+          jobDescription: '',
+          status: foundSession.status as SessionStatus || SessionStatus.QUESTIONS_READY,
+          questions: foundSession.questions,
+          transcript: '',
+          report: undefined,
+          createdAt: foundSession.createdAt
+        });
+        setError(null);
+        return; // Exit early - consent screen shows next
+      } else {
+        setError("Invalid email or OTP. Please check and try again.");
+      }
+    } catch (error) {
+      console.error('DynamoDB lookup failed:', error);
+      setError("Session lookup failed. Please check your connection and try again.");
     }
   };
 
@@ -36,10 +69,13 @@ const StartSessionView: React.FC<Props> = ({ sessions }) => {
    * Finalizes session entry and redirects to the live interview room.
    */
   const handleStart = () => {
-    if (session && consent) {
-      navigate(`/interview/${session.id}`);
-    }
-  };
+  if (session && consent) {
+    navigate(`/interview/${session.id}`, { 
+      state: { session } 
+    });
+  }
+};
+
 
   // Step 2: Confirmation & Consent screen
   if (session) {
@@ -110,6 +146,18 @@ const StartSessionView: React.FC<Props> = ({ sessions }) => {
       <p className="text-slate-600 mb-8">Enter the 6-digit OTP provided by your instructor or system administrator.</p>
 
       <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2 text-left">Candidate Email</label>
+          <input 
+            type="email"
+            required
+            className="w-full text-left px-4 py-3 rounded-2xl border-2 border-slate-200 focus:border-indigo-600 outline-none transition-all"
+            placeholder="candidate@example.com"
+            value={candidateEmail}
+            onChange={e => setCandidateEmail(e.target.value)}
+          />
+        </div>
+
         <input 
           type="text"
           maxLength={6}
