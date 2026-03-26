@@ -101,6 +101,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
         };
 
         recorder.start(1000);
+        await new Promise(r => setTimeout(r, 100)); // ← small delay to ensure state updates
         console.log('🎥 Recorder state after start():', recorder.state);
         mediaRecorderRef.current = recorder;
 
@@ -127,14 +128,7 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
       navigate('/start');
       return () => {
         if (interval) clearInterval(interval);
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-        }
-      };
+        };
     }
 
     let interval: NodeJS.Timeout;
