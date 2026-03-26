@@ -1,5 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+
 
 // Single client instance
 const client = new DynamoDBClient({
@@ -9,6 +11,16 @@ const client = new DynamoDBClient({
     secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY as string
   }
 });
+
+// S3 client instance
+const s3 = new S3Client({
+  region: import.meta.env.VITE_AWS_REGION,
+  credentials: {
+    accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
+    secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY
+  }
+});
+
 
 export interface CreateSessionData {
   email: string;
@@ -105,4 +117,48 @@ export async function getSessionByEmailOtp(email: string, otp: string): Promise<
     console.error('❌ getSessionByEmailOtp error:', error);
     return null;
   }
+}
+
+//helper to upload a Blob to S3
+export async function uploadInterviewVideo(params: {
+  email: string;
+  sessionId: string;
+  blob: Blob;
+}): Promise<string> {
+  const bucket = import.meta.env.VITE_S3_BUCKET;
+  const region = import.meta.env.VITE_AWS_REGION;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  const key = `USER#${params.email}/INTERVIEW#${params.sessionId}/${timestamp}.webm`;
+
+  const arrayBuffer = await params.blob.arrayBuffer();
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: new Uint8Array(arrayBuffer),
+    ContentType: 'video/webm'
+  });
+
+  await s3.send(command);
+
+  // Public URL pattern (bucket/prefix must allow read or you’ll later use signed URLs)
+  return `https://${bucket}.s3.${region}.amazonaws.com/${encodeURIComponent(key)}`;
+}
+
+//helper to save videoUrl on session
+export async function updateSessionVideoUrl(email: string, sessionId: string, videoUrl: string) {
+  const command = new UpdateCommand({
+    TableName: import.meta.env.VITE_DYNAMODB_TABLE,
+    Key: {
+      PK: `USER#${email}`,
+      SK: `INTERVIEW#${sessionId}`
+    },
+    UpdateExpression: 'SET videoUrl = :url',
+    ExpressionAttributeValues: {
+      ':url': videoUrl
+    }
+  });
+
+  await client.send(command);
 }

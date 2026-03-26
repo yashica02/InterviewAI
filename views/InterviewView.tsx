@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { InterviewSession, SessionStatus, InterviewQuestion } from '../types';
-// import { analyzeInterview } from '../services/aiService';
+import { uploadInterviewVideo, updateSessionVideoUrl } from '../services/dynamodbService';
 import { Camera, Mic, Timer, ChevronRight, CheckCircle, Loader2, VideoOff, RefreshCw, AlertTriangle, Video } from 'lucide-react';
 
 interface Props {
@@ -33,6 +33,9 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
   const [transcriptData, setTranscriptData] = useState<string[]>([]);
   const [cameraActive, setCameraActive] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<BlobPart[]>([]);
+
 
   /**
    * Initializes the browser media stream for video/audio.
@@ -62,11 +65,56 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
 
   const handleStartInterview = async () => {
     const success = await startCamera();
-    if (success) {
-      setHasStarted(true);
-      updateSession(session!.id, { status: SessionStatus.IN_INTERVIEW });
+    if (success && streamRef.current) {
+      try {
+        recordedChunksRef.current = [];
+
+        // ✅ Check supported mimeType first
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+          ? 'video/webm;codecs=vp8,opus'
+          : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : '';
+
+        console.log('🎥 Using mimeType:', mimeType || 'browser default');
+        console.log('🎥 Stream tracks:', streamRef.current.getTracks().map(t => t.kind));
+
+        const recorder = new MediaRecorder(streamRef.current, {
+          ...(mimeType ? { mimeType } : {})
+        });
+
+        console.log('🎥 Recorder state after creation:', recorder.state);
+
+        recorder.ondataavailable = (event) => {
+          console.log('📦 ondataavailable fired, size:', event.data?.size);
+          if (event.data && event.data.size > 0) {
+            recordedChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onerror = (e) => {
+          console.error('❌ MediaRecorder error:', e);
+        };
+
+        recorder.onstart = () => {
+          console.log('▶️ Recorder started, state:', recorder.state);
+        };
+
+        recorder.start(1000);
+        console.log('🎥 Recorder state after start():', recorder.state);
+        mediaRecorderRef.current = recorder;
+
+        setHasStarted(true);
+        updateSession(session.id, { status: SessionStatus.IN_INTERVIEW });
+      } catch (err) {
+        console.error('Failed to start MediaRecorder:', err);
+        setPermissionError('Could not start recording. Please try again.');
+      }
+    } else {
+      console.error('❌ startCamera failed or streamRef is null');
     }
   };
+
 
   /**
    * Component mounting logic:
@@ -77,7 +125,16 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
     // Only redirect if no session AND no session in navigation state
     if (!session && !location.state?.session) {
       navigate('/start');
-      return;
+      return () => {
+        if (interval) clearInterval(interval);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      };
     }
 
     let interval: NodeJS.Timeout;
@@ -216,8 +273,60 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
     setIsFinishing(true);
     updateSession(session.id, { status: SessionStatus.UPLOADING });
 
-    // Simulate network delay for video/audio processing
-    await new Promise(r => setTimeout(r, 2000));
+    // Stop MediaRecorder and flush all remaining chunks
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      const recorder = mediaRecorderRef.current;
+
+      await new Promise<void>((resolve) => {
+         recorder.onstop = () => {
+          console.log('⏹ Recorder stopped. Total chunks:', recordedChunksRef.current.length);
+          resolve();
+        };
+        recorder.requestData(); // flush last buffer to existing ondataavailable handler
+        recorder.stop();
+      });
+    }
+
+    // Validate blob before uploading
+    const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+    console.log('📹 Chunks collected:', recordedChunksRef.current.length);
+    console.log('📹 Blob size (bytes):', blob.size);
+
+    // ✅ Save video locally for debugging
+    if (blob.size > 10000) {
+      const localUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = localUrl;
+      a.download = `interview-${session.id}-${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(localUrl);
+      console.log('💾 Video saved locally');
+    }
+
+    //s3 video upload
+    let videoUrl: string | null = null;
+    if (blob.size > 10000) {
+      try {
+        videoUrl = await uploadInterviewVideo({
+          email: session.candidateEmail,
+          sessionId: session.id,
+          blob
+        });
+
+        await updateSessionVideoUrl(session.candidateEmail, session.id, videoUrl);
+        updateSession(session.id, { videoUrl });
+        console.log('✅ Video uploaded:', videoUrl);
+      } catch (err) {
+        console.error('❌ Video upload failed:', err);
+        // Continue to report even if upload fails
+      }
+    } else {
+      console.error('❌ Blob too small, skipping upload. Size:', blob.size);
+    }
+
+    // Update status to uploaded
     updateSession(session.id, { status: SessionStatus.UPLOADED });
 
     setIsProcessing(true);
@@ -225,24 +334,23 @@ const InterviewView: React.FC<Props> = ({ sessions, updateSession }) => {
 
     try {
       const fullTranscript = transcriptData.join(" ");
-      // The service has a built-in timeout and fallback mechanism
-      const report = await analyzeInterview(session, fullTranscript || "Sample transcript for analysis purposes.");
-      
-      updateSession(session.id, { 
-        status: SessionStatus.SCORED, 
-        report,
+      // TODO: replace with real transcript from video later
+
+      updateSession(session.id, {
+        status: SessionStatus.SCORED,
         transcript: fullTranscript
       });
-      
+
       navigate(`/report/${session.id}`);
     } catch (err) {
       console.error("Finalization error:", err);
-      updateSession(session.id, { status: SessionStatus.REPORT_SENT }); 
+      updateSession(session.id, { status: SessionStatus.REPORT_SENT });
       navigate(`/report/${session.id}`);
     } finally {
       setIsProcessing(false);
     }
-  };
+};
+
 
   // Loading state during processing
   if (isFinishing || isProcessing) {

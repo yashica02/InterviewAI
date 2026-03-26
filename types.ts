@@ -43,6 +43,7 @@ export interface InterviewSession {
   transcript?: string; // Full text of the candidate's responses
   report?: InterviewReport; // AI-generated performance analysis
   createdAt: number;
+  videoUrl?: string; 
 }
 
 /**
